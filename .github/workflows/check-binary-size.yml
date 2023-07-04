@@ -1,40 +1,78 @@
+# This workflow checks if a PR commit has changed the size of a hello world Rust program.
+# It downloads Rustc and compiles two versions of a stage0 compiler - one using the base commit
+# of the PR, and one using the latest commit in the PR.
+# If the size of the hello world program has changed, it posts a comment to the PR.
 name: Check binary size
 
 on:
   pull_request:
     branches:
-    - master
+      - master
 
 jobs:
   test:
     name: Check binary size
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
-    - name: Print info
-      run: |
-        echo "Current SHA: ${{ github.sha }}"
-        echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
-    - name: Clone Rustc
-      run: git clone https://github.com/rust-lang/rust --depth=1
-    - name: Create hello world crate
-      run: cargo new --bin /tmp/crate
-    - name: Build reference binary
-      run: |
-        cd rust
-        cp src/bootstrap/defaults/config.library.toml config.toml
-        cd library/backtrace
-        git fetch
-        git checkout ${{ github.event.pull_request.base.sha }}
-        cd ../..
-        python3 x.py build library --stage 0
-        ./build/x86_64-unknown-linux-gnu/stage0/bin/rustc -O /tmp/crate/src/main.rs -o binary-reference
-    - name: Build current binary
-      run: |
-        cd library/backtrace
-        git checkout ${{ github.sha }}
-        cd ../..
-        python3 x.py build library --stage 0
-        ./build/x86_64-unknown-linux-gnu/stage0/bin/rustc -O /tmp/crate/src/main.rs -o binary-updated
-    - name: Display binary size
-      run: |
-        ls -lha binary-*
+      - name: Print info
+        run: |
+          echo "Current SHA: ${{ github.event.pull_request.head.sha }}"
+          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+      - name: Clone Rustc
+        run: |
+          git clone https://github.com/rust-lang/rust --depth=1
+          cd rust
+          git submodule update --init library/backtrace
+      - name: Create hello world crate
+        run: cargo new --bin /tmp/hello
+      - name: Build binary with base version of backtrace
+        run: |
+          cd rust
+          printf "[llvm]\ndownload-ci-llvm = true\n\n[rust]\nincremental = false\n" > config.toml
+          cd library/backtrace
+          git remote add kobzol https://github.com/kobzol/backtrace-rs
+          git fetch --all
+          git checkout ${{ github.event.pull_request.base.sha }}
+          cd ../..
+          python3 x.py build library --stage 0
+          ./build/x86_64-unknown-linux-gnu/stage0/bin/rustc -O /tmp/hello/src/main.rs -o binary-reference
+      - name: Build binary with PR version of backtrace
+        run: |
+          cd rust
+          cd library/backtrace
+          git checkout ${{ github.event.pull_request.head.sha }}
+          cd ../..
+          rm -rf build/x86_64-unknown-linux-gnu/stage0-std
+          python3 x.py build library --stage 0
+          ./build/x86_64-unknown-linux-gnu/stage0/bin/rustc -O /tmp/hello/src/main.rs -o binary-updated
+      - name: Display binary size
+        run: |
+          ls -la rust/binary-*
+          echo "SIZE_REFERENCE=$(stat -c '%s' rust/binary-reference)" >> "$GITHUB_ENV"
+          echo "SIZE_UPDATED=$(stat -c '%s' rust/binary-updated)" >> "$GITHUB_ENV"
+      - name: Post a PR comment if the size has changed
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const reference = process.env.SIZE_REFERENCE;
+            const updated = process.env.SIZE_UPDATED;
+            const diff = updated - reference;
+            let diff_str = `${diff}B`;
+            if (diff > 0) {
+              diff_str = `+${diff_str}`;
+            }
+
+            if (diff !== 0) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `Below is the size of a hello-world Rust program linked with libstd with backtrace.
+
+                  Original binary size: **${reference}B**
+                  Updated binary size: **${updated}B**
+                  Difference: **${diff_str}**`
+              })
+            }

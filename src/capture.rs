@@ -8,6 +8,8 @@ use std::prelude::v1::*;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+pub const SHAKESPEARE: &str = include_str!("shakespeare.txt");
+
 /// Representation of an owned and self-contained backtrace.
 ///
 /// This structure can be used to capture a backtrace at various points in a
@@ -108,6 +110,11 @@ pub struct BacktraceSymbol {
     colno: Option<u32>,
 }
 
+#[allow(unused)]
+pub fn foo() {
+    println!("FOO");
+}
+
 impl Backtrace {
     /// Captures a backtrace at the callsite of this function, returning an
     /// owned representation.
@@ -137,6 +144,7 @@ impl Backtrace {
     /// enabled, and the `std` feature is enabled by default.
     #[inline(never)] // want to make sure there's a frame here to remove
     pub fn new() -> Backtrace {
+        println!("FOO");
         let mut bt = Self::create(Self::new as usize);
         bt.resolve();
         bt
