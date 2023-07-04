@@ -1,0 +1,38 @@
+name: Check binary size
+
+on:
+  pull_request:
+    branches:
+    - master
+
+jobs:
+  test:
+    name: Check binary size
+    runs-on: ubuntu-latest
+    steps:
+    - name: Print info
+      run: |
+        echo "Current SHA: ${{ github.sha }}"
+        echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+    - name: Clone Rustc
+      run: git clone https://github.com/rust-lang/rust --depth=1 --recursive
+    - name: Create hello world crate
+      run: cargo new --bin /tmp/crate
+    - name: Build reference binary
+      run: |
+        cd library/backtrace
+        git fetch
+        git checkout ${{ github.event.pull_request.base.sha }}
+        cd ../..
+        python3 x.py build library --stage 0
+        ./build/x86_64-unknown-linux-gnu/stage0/bin/rustc -O /tmp/crate/src/main.rs -o binary-reference
+    - name: Build current binary
+      run: |
+        cd library/backtrace
+        git checkout ${{ github.sha }}
+        cd ../..
+        python3 x.py build library --stage 0
+        ./build/x86_64-unknown-linux-gnu/stage0/bin/rustc -O /tmp/crate/src/main.rs -o binary-updated
+    - name: Display binary size
+      run: |
+        ls -lha binary-*
