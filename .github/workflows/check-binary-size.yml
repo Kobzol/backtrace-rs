@@ -15,11 +15,13 @@ jobs:
         echo "Current SHA: ${{ github.sha }}"
         echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
     - name: Clone Rustc
-      run: git clone https://github.com/rust-lang/rust --depth=1 --recursive
+      run: git clone https://github.com/rust-lang/rust --depth=1
     - name: Create hello world crate
       run: cargo new --bin /tmp/crate
     - name: Build reference binary
       run: |
+        cd rust
+        cp src/bootstrap/defaults/config.library.toml config.toml
         cd library/backtrace
         git fetch
         git checkout ${{ github.event.pull_request.base.sha }}
