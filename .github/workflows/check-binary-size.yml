@@ -20,7 +20,7 @@ jobs:
         run: |
           echo "Current SHA: ${{ github.event.pull_request.head.sha }}"
           echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
-          echo "${{ toJSON(github.event.pull_request) $}}"
+          echo "${{ toJSON(github.event.pull_request) }}"
       - name: Clone Rustc
         uses: actions/checkout@v3
         with:
